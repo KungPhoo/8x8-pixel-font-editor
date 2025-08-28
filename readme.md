@@ -3,6 +3,11 @@ This html page is a pixel font editor
 for retro bitmap fonts. It supports
 the full Unicode range.
 
+You might instantly run it using
+github's preview feature:
+[HMTL Preview](https://htmlpreview.github.io/?https://github.com/KungPhoo/8x8-pixel-font-editor/blob/main/8x8-font-editor.html)
+
+
 ## User Interface
 A the top you find 2 input boxes.
 Here, you enter the Unicode point range
