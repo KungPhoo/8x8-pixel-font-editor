@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>8x8 Emoji Font Editor</title>
+    <style>
+        @font-face {
+            font-family: "Unifont";
+            src: url("UnifontExMono.woff") format('woff');
+        }
+
+        @font-face {
+            font-family: 'NotoEmoji';
+            src: url('NotoEmoji-Bold.ttf');
+        }
+
+        body {
+            font-family: sans-serif;
+        }
+
+        .char-list {
+            font-family: Unifont;
+            max-height: 90vh;
+            overflow-y: auto;
+            border-right: 1px solid #ccc;
+            padding-right: 1rem;
+        }
+
+        .char-button {
+            cursor: pointer;
+            padding: 5px;
+            font-size: 20px;
+            display: inline-block;
+            width: 2em;
+            height: 2em;
+            text-align: center;
+        }
+
+            .char-button.active {
+                background: #ddd;
+                border-radius: 4px;
+            }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(8, 20px);
+            grid-template-rows: repeat(8, 20px);
+            gap: 2px;
+            margin-bottom: 10px;
+        }
+
+        .cell {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #aaa;
+            cursor: pointer;
+            background: white;
+        }
+
+            .cell.on {
+                background: black;
+            }
+
+        .charPreview {
+            font-family: 'Segoe UI Symbol';
+            font-size: 32px;
+        }
+
+        .charPreview2 {
+            font-family: Unifont;
+            font-size: 32px;
+        }
+
+        .charPreview3 {
+            font-family: NotoEmoji;
+            font-size: 32px;
+        }
+
+        #code-output {
+            font-family: monospace;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body>
+    <input type='text' id="startCodepoint" list="unicode-groups" /> - <input type="text" id="endCodepoint"  list="unicode-groups"/><button id="updateRange">Update</button>
+    <datalist id="unicode-groups">
+        <option value="2070" label="Superscripts and Subscripts"></option>
+        <option value="20A0" label="Currency Symbols"></option>
+        <option value="20D0" label="Combining Diacritical Marks for Symbols"></option>
+        <option value="2190" label="Arrows"></option>
+        <option value="2500" label="Box Drawing"></option>
+        <option value="2580" label="Block Elements"></option>
+        <option value="25A0" label="Geometric Shapes"></option>
+        <option value="2600" label="Miscellaneous Symbols"></option>
+        <option value="2701" label="Dingbats"></option>
+        <option value="27C0" label="Miscellaneous Math Symbols - A"></option>
+        <option value="27F0" label="Supplemental Arrows - A"></option>
+        <option value="2800" label="Braille Patterns"></option>
+        <option value="2900" label="Supplemental Arrows - B"></option>
+        <option value="2980" label="Miscellaneous Math Symbols - B"></option>
+        <option value="2A00" label="Supplemental Math Operators"></option>
+        <option value="2B00" label="Miscellaneous Symbols and Arrows"></option>
+        <option value="1F300" label="Miscellaneous Symbols and Picts"></option>
+        <option value="1F600" label="Emoticons"></option>
+        <option value="1F680" label="Transport and Map Symbols"></option>
+        <option value="1F700" label="Alchemical Symbols"></option>
+        <option value="1F780" label="Geometric Shapes Extended"></option>
+        <option value="1F800" label="Supplemental Arrows-C"></option>
+        <option value="1F900" label="Supplemental Symbols and Picts"></option>
+        <option value="1FA00" label="Chess Symbols"></option>
+        <option value="1FA70" label="Symbols and Picts Extended-A"></option>
+        <option value="1FB00" label="Symbols for Legacy Computing"></option>
+    </datalist>
+
+    <br />
+    <div class="char-list" id="charList"></div>
+    <br />
+    <div>
+        <h3>
+            Edit: <span class="charPreview" id="charPreview">?</span>
+            <span class="charPreview2" id="charPreview2">?</span>
+            <span class="charPreview3" id="charPreview3">?</span>
+            (<span id="codepointLabel">0xFFFFF</span>)
+        </h3>
+        <br />
+        <div class="grid" id="grid"></div>
+        <br />
+        <button id="extractBtn1">Extract from Standard Font</button>
+        <button id="extractBtn2">Extract from Unifont</button>
+        <button id="extractBtn3">Extract from Noto Emoji</button>
+        <br />
+        <button id="copyButton" onclick="onCopy();">🗐 Copy</button>
+        <button id="pasteButton" onclick="onPaste();">📋 Paste</button>
+        <button id="flipxButton" onclick="onFlipX();">🪞X</button>
+        <button id="flipyutton" onclick="onFlipY();">🪞Y</button>
+        <button id="rotateButton" onclick="onRotate();">↷</button>
+        <br />
+        <!--  style="display: none;" -->
+        <canvas id="emojiRender" width="8" height="8"></canvas>
+
+
+        <br />
+        <div id="code-output"></div>
+        <br />
+        <textarea id="inputmap"></textarea>
+        <button id="parseInput" onclick="onParseInput();">Parse C++ Input</button>
+        <button id="parseInput" onclick="updateFullCode();">Generate Full C++ Input</button>
+    </div>
+    <br />
+
+
+    <script src="emoji-full.js"></script>
+
+    <script>
+        var clipboard = [0, 0, 0, 0, 0, 0, 0, 0];
+        var startCodepoint = 0x00001; // 0x1F600;
+        var endCodepoint = 0x00ff; // 0x1F64F;
+        const charListDiv = document.getElementById("charList");
+        const gridDiv = document.getElementById("grid");
+        const codeOutput = document.getElementById("code-output");
+        const charPreview = document.getElementById("charPreview");
+        const charPreview2 = document.getElementById("charPreview2");
+        const codepointLabel = document.getElementById("codepointLabel");
+        const emojiBitmaps = {}; // [codepoint] = [8-bytes-array];
+        // for (let cp = startCodepoint; cp <= endCodepoint; cp++) {
+        //     emojiBitmaps[cp] = Array(8).fill(0);
+        // }
+
+        const StorageKey = "cppcode";
+
+        let currentCodepoint = startCodepoint;
+
+        // ONLOAD
+        window.onload = () => {
+            var stored = localStorage.getItem(StorageKey);
+            if (stored) {
+                document.getElementById('inputmap').value = stored;
+                onParseInput();
+            }
+            document.getElementById("startCodepoint").value = startCodepoint.toString(16);
+            document.getElementById("endCodepoint").value = endCodepoint.toString(16);
+            updateRange();
+        }
+
+        function updateRange() {
+            startCodepoint = parseInt(document.getElementById("startCodepoint").value, 16);
+            endCodepoint = parseInt(document.getElementById("endCodepoint").value, 16);
+
+            for (let cp = startCodepoint; cp <= endCodepoint; cp++) {
+                const char = String.fromCodePoint(cp);
+                if (emojiBitmaps[cp] == undefined) {
+                    const bitmap = extractFromEmoji(char, "Unifont", 8);
+                    emojiBitmaps[cp] = bitmap;
+                }
+            }
+            renderCharList();
+            renderGrid();
+        }
+
+        // each preview char is a button. Click to edit the pixels.
+        function renderCharList() {
+            charListDiv.innerHTML = "";
+            for (let cp = startCodepoint; cp <= endCodepoint; cp++) {
+
+                if (unicode_names[cp] == undefined) {
+                    continue;
+                }
+
+                const btn = document.createElement("div");
+                btn.className = "char-button";
+                btn.textContent = String.fromCodePoint(cp);
+                btn.dataset.cp = cp;
+                btn.onclick = () => {
+                    currentCodepoint = parseInt(btn.dataset.cp);
+                    document.querySelectorAll(".char-button").forEach(b => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    renderGrid();
+                };
+                if (cp === currentCodepoint) btn.classList.add("active");
+                charListDiv.appendChild(btn);
+            }
+        }
+
+        // grid to check the bits
+        function renderGrid() {
+            gridDiv.innerHTML = "";
+            charPreview.textContent = String.fromCodePoint(currentCodepoint);
+            charPreview2.textContent = String.fromCodePoint(currentCodepoint);
+            charPreview3.textContent = String.fromCodePoint(currentCodepoint);
+            codepointLabel.textContent = "U+" + currentCodepoint.toString(16).toUpperCase() + ", " + unicode_names[currentCodepoint];
+            var bitmap = emojiBitmaps[currentCodepoint];
+            if (bitmap == undefined) {
+                bitmap = extractFromEmoji(currentCodepoint, "Unifont", 8);
+                emojiBitmaps[currentCodepoint] = bitmap;
+            }
+
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const bit = (bitmap[y] >> (7 - x)) & 1;
+                    const cell = document.createElement("div");
+                    cell.className = "cell" + (bit ? " on" : "");
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    cell.onclick = () => {
+                        bitmap[y] ^= (1 << (7 - x)); // toggle bit
+                        renderGrid();
+                    };
+                    gridDiv.appendChild(cell);
+                }
+            }
+
+            // const line = `{ 0x${currentCodepoint.toString(16).toUpperCase()}, { ${bitmap.join(", ")} } },`;
+            // codeOutput.textContent = line;
+            updateCode();
+        }
+
+        // update code reagon for the current codepoint range
+        function updateCode() {
+            let output = "const emojiBitmaps = {\n";
+            for (let cp = startCodepoint; cp <= endCodepoint; cp++) {
+                if (unicode_names[cp] == undefined) {
+                    continue;
+                }
+                const char = String.fromCodePoint(cp);
+                const bitmap = emojiBitmaps[cp];
+                if (bitmap == undefined) { continue; }
+                const rows = bitmap.map(b => "0x" + ('0' + b.toString(16)).slice(-2)).join(", ");
+                output += `  { 0x${('00000' + cp.toString(16)).slice(-5).toUpperCase()}, { ${rows} } }, // ` + unicode_names[cp] + '\n';
+            }
+
+            output += "};";
+            codeOutput.textContent = output;
+        }
+
+        // update the textarea with all stored codes.
+        function updateFullCode() {
+            output = '';
+            for (let cp = 0x0000; cp <= 0x1ffff; cp++) {
+                if (unicode_names[cp] == undefined) {
+                    continue;
+                }
+                const char = String.fromCodePoint(cp);
+                const bitmap = emojiBitmaps[cp];
+                if (bitmap == undefined) { continue; }
+                const rows = bitmap.map(b => "0x" + ('0' + b.toString(16)).slice(-2)).join(", ");
+                output += `  { 0x${('00000' + cp.toString(16)).slice(-5).toUpperCase()}, { ${rows} } }, // ` + unicode_names[cp] + '\n';
+            }
+            document.getElementById('inputmap').value = output;
+            document.execCommand('copy');
+            localStorage.setItem(StorageKey, output);
+        }
+
+
+        renderCharList();
+        renderGrid();
+
+        document.getElementById("updateRange").onclick = () => {
+            updateRange();
+        };
+
+        document.getElementById("extractBtn1").onclick = () => {
+            emojiBitmaps[currentCodepoint] = extractFromEmoji(String.fromCodePoint(currentCodepoint), "Segoe UI Symbol", 0);
+            renderGrid();
+        };
+        document.getElementById("extractBtn2").onclick = () => {
+            emojiBitmaps[currentCodepoint] = extractFromEmoji(String.fromCodePoint(currentCodepoint), "Unifont", 8.0);
+            renderGrid();
+        };
+        document.getElementById("extractBtn3").onclick = () => {
+            emojiBitmaps[currentCodepoint] = extractFromEmoji(String.fromCodePoint(currentCodepoint), "NotoEmoji", 0);
+            renderGrid();
+        };
+
+
+        function doesFitBox(char, font, fontsize) {
+            // Create an off-screen canvas
+            var canvas = document.createElement("canvas");
+            canvas.width = 12;
+            canvas.height = 12;
+
+
+            var ctx = canvas.getContext("2d");
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.imageSmoothingEnabled = false;
+            ctx.fillStyle = "#000";
+            ctx.font = `${fontsize}px '${font}'`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            // Draw text
+            ctx.fillText(char, 6, 6, 8.5);
+
+            // Check actual pixel usage
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let minX = 99, minY = 99, maxX = 0, maxY = 0;
+            let hasPixel = false;
+
+            for (let y = 0; y < 12; y++) {
+                for (let x = 0; x < 12; x++) {
+                    const idx = (y * canvas.width + x) * 4;
+                    if (imageData[idx + 1] < 64) { // green ~0
+                        hasPixel = true;
+                        minX = Math.min(minX, x);
+                        minY = Math.min(minY, y);
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+            ctx = null;
+            canvas = null;
+
+            if (!hasPixel) return false;
+            const fits = (maxX - minX + 1 <= 8) && (maxY - minY + 1 <= 8);
+            return fits;
+        }
+
+        function findFontSize(char, font) {
+            var bestFitSize = 8.0;
+            var low = 6.0, high = 10.0;
+            // Binary search for best font size
+            while (low <= high && high - low > 0.1) {
+                const mid = (low + high) / 2;
+                if (doesFitBox(char, font, mid)) {
+                    bestFitSize = mid;
+                    low = mid; // Try larger
+                } else {
+                    high = mid; // Try smaller
+                }
+            }
+            // if(bestFitSize>8){bestFitSize=8.0;}
+            return bestFitSize;
+        }
+
+
+        function extractFromEmoji(char, font, fontsize = 0) {
+            const canvas = document.getElementById("emojiRender");
+            const ctx = canvas.getContext("2d");
+
+            ctx.beginPath();
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.imageSmoothingEnabled = false;
+            ctx.fillStyle = "#000";
+
+            if (fontsize == 0) {
+                fontsize = findFontSize(char, font);
+            }
+            ctx.font = fontsize.toString() + "px '" + font + "'";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(char, 4, 4, 8.5); // center of 8x8 canvas
+
+            const imgData = ctx.getImageData(0, 0, 8, 8).data;
+
+            const result = [];
+            for (let y = 0; y < 8; y++) {
+                let rowByte = 0;
+                for (let x = 0; x < 8; x++) {
+                    const i = (y * 8 + x) * 4;
+                    const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2], a = imgData[i + 3];
+
+                    const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+                    const isBlack = brightness < 220;
+
+                    // if(a<128){isBlack=false;} // transparent
+
+                    rowByte = (rowByte << 1) | (isBlack ? 1 : 0);
+                }
+                result.push(rowByte);
+            }
+
+            return result;
+        }
+
+        function parseNum(str) {
+            if (str.startsWith("0x")) {
+                return parseInt(str.substring(2), 16);
+            }
+            return parseInt(str, 10);
+        }
+
+        function onParseInput() {
+            input = document.getElementById('inputmap').value;
+            input.split("\n").forEach(line => {
+                const match = line.match(/\{\s*(0x[0-9A-Fa-f]+)\s*,\s*\{([^}]*)\}/);
+                if (match) {
+                    const codepoint = parseInt(match[1], 16);
+                    const bytes = match[2]
+                        .split(",")
+                        .map(s => s.trim())
+                        .filter(s => s.length)
+                        .map(b => parseNum(b)/* parseInt(b, 16)*/);
+                    emojiBitmaps[codepoint] = bytes;
+                }
+            });
+        }
+
+        function onCopy() {
+            clipboard = emojiBitmaps[currentCodepoint].slice();
+        }
+        function onPaste() {
+            emojiBitmaps[currentCodepoint] = clipboard.slice();
+            renderGrid();
+        }
+        // Reverse the bit order of an 8-bit integer (0..255)
+        function xFlip8(n) {
+            n &= 0xFF; // ensure 8-bit
+            n = ((n & 0xF0) >>> 4) | ((n & 0x0F) << 4);
+            n = ((n & 0xCC) >>> 2) | ((n & 0x33) << 2);
+            n = ((n & 0xAA) >>> 1) | ((n & 0x55) << 1);
+            return n & 0xFF;
+        }
+        function onFlipX() {
+            var bits = emojiBitmaps[currentCodepoint];
+            for (i = 0; i < 8; ++i) {
+                bits[i] = xFlip8(bits[i]);
+            }
+            renderGrid();
+        }
+        function onFlipY() {
+            emojiBitmaps[currentCodepoint] = emojiBitmaps[currentCodepoint].reverse();
+            renderGrid();
+        }
+
+        function rotate90(matrix) {
+            const result = Array(8).fill(0);
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    // check if bit at (r,c) is set
+                    if (matrix[r] & (1 << (7 - c))) {
+                        // move it to (c, 7-r) in result
+                        result[c] |= (1 << r);
+                    }
+                }
+            }
+            return result;
+        }
+
+        function onRotate() {
+            emojiBitmaps[currentCodepoint] = rotate90(emojiBitmaps[currentCodepoint]);
+            renderGrid();
+        }
+
+    </script>
+
+</body>
+</html>
